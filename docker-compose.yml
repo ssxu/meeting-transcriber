@@ -1,0 +1,59 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # 用时区名称，如 Asia/Shanghai、America/New_York、Europe/London
+      # 影响日志时间、文件存储目录日期、导出文档中的时间显示
+      - TZ=Asia/Shanghai
+      - DATABASE_URL=sqlite+aiosqlite:////data/meeting.db
+      # 存储根目录，下设 recordings / transcripts / summaries 子目录
+      - STORAGE_PATH=/data
+      # Zvec 向量数据库存储路径
+      - ZVEC_DATA_PATH=/data/zvec
+      # ===== Qwen3-ASR 服务 =====
+      # ASR 服务部署在 192.168.100.51:7034
+      - ASR_BASE_URL=http://192.168.100.51:7034
+      - ASR_MODEL=qwen3-asr
+      - ASR_TIMEOUT=600
+      # X-NLS-Token 安全访问令牌（可选，配置了就发送，不配置则不发送）
+      - ASR_XLS_TOKEN=
+      # ===== 指向你的本地 LLM（Ollama / vLLM 等 OpenAI 兼容）=====
+      - LLM_BASE_URL=http://host.docker.internal:11434
+      - LLM_API_KEY=ollama
+      - LLM_MODEL=qwen3:latest
+      - LLM_TIMEOUT=300
+      # ===== zh-recogn 转录接口 =====
+      - ZH_RECOGN_URL=http://192.168.100.56:7005/api
+      - ZH_RECOGN_TIMEOUT=1800
+      # ===== CORS =====
+      - CORS_ORIGINS=*
+      # ===== Webhook 回调（可选）=====
+      - WEBHOOK_URL=
+      # ===== 分享链接 token 密钥 =====
+      - SHARE_SECRET=meeting-transcriber-share-secret-2024
+      # ===== 登录认证 =====
+      - AUTH_PASSWORD=password
+      - JWT_SECRET=meeting-transcriber-jwt-secret-2024
+      - JWT_EXPIRE_HOURS=72
+      # ===== MCP Server =====
+      - MCP_TOKEN=
+      - MCP_MAX_RESULTS=20
+    # 使用 bind mount 映射到 NAS 的 data 文件夹
+    # 将 ./data 替换为你的 NAS 挂载路径，如 /mnt/nas/meeting-transcriber/data
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+# ===== 使用 bind mount 而非 named volume =====
+# 数据存储在 ./data 目录下，可自行配置 NAS 映射路径
+# volumes 已移除，使用 bind mount 方便直接映射 NAS
