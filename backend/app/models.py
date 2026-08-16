@@ -1,7 +1,7 @@
 """数据模型定义模块。"""
 from datetime import datetime
 from sqlalchemy import String, Integer, Float, Text, JSON, func, Boolean, ForeignKey
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from app.db import UTCDateTime
 
 
@@ -57,8 +57,12 @@ class Recording(Base):
     content_category: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     # 内容场景细分类型: regular/tech_review/.../course/podcast/academic
     content_sub_type: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
-    # 转录引擎: qwen_asr / zh_recogn
+    # 转录引擎: qwen_asr
     engine: Mapped[str] = mapped_column(String(30), default="qwen_asr")
+    # 关联的 ASR 提供商 ID
+    asr_provider_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("asr_providers.id", ondelete="SET NULL"), nullable=True, default=None
+    )
     # 用户备注（Markdown 格式）
     notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # 时间戳
@@ -182,7 +186,7 @@ class TranscriptionQueue(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     recording_id: Mapped[int] = mapped_column(ForeignKey("recordings.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(30), default="queued")  # queued / processing / done / cancelled
-    # 转录引擎: qwen_asr (默认) / zh_recogn
+    # 转录引擎: qwen_asr (默认)
     engine: Mapped[str] = mapped_column(String(30), default="qwen_asr")
     queued_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
@@ -210,6 +214,28 @@ class PromptConfig(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     description: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AsrProvider(Base):
+    """ASR 提供商配置 - 管理 OpenAI 兼容的语音识别服务。"""
+    __tablename__ = "asr_providers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True)
+    base_url: Mapped[str] = mapped_column(String(500))
+    auth_header: Mapped[str] = mapped_column(String(100), default="")
+    auth_value: Mapped[str] = mapped_column(String(500), default="")
+    timeout: Mapped[int] = mapped_column(Integer, default=600)
+    supports_speaker: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_hotwords: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), server_default=func.now(), onupdate=func.now()

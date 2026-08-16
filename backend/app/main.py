@@ -10,6 +10,7 @@ from app.routes import recordings, stats, share, voiceprints, hotwords, meeting_
 from app.routes.transcription import router as transcription_router, schedule_router, start_queue_poller
 from app.routes.mcp import router as mcp_router
 from app.routes.prompt_config import router as prompt_config_router
+from app.routes.asr_providers import router as asr_providers_router
 from app.auth import auth_middleware, router as auth_router
 from app.config import settings
 from app.services.vector_store import vector_store
@@ -100,6 +101,7 @@ app.include_router(transcription_router)
 app.include_router(schedule_router)
 app.include_router(mcp_router)
 app.include_router(prompt_config_router)
+app.include_router(asr_providers_router)
 
 # ===== 认证中间件（放在最后，确保所有路由已注册）=====
 @app.middleware("http")

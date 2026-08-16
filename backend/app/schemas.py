@@ -296,6 +296,54 @@ class LLMModelOut(BaseModel):
         return self
 
 
+# ===== ASR 提供商管理 =====
+class AsrProviderCreate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    name: str = Field(..., max_length=200)
+    base_url: str = Field(..., max_length=500)
+    auth_header: str = ""
+    auth_value: str = ""
+    timeout: int = 600
+    supports_speaker: bool = True
+    supports_hotwords: bool = True
+    is_default: bool = False
+    is_enabled: bool = True
+    sort_order: int = 0
+    description: Optional[str] = None
+
+
+class AsrProviderUpdate(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+    auth_header: Optional[str] = None
+    auth_value: Optional[str] = None
+    timeout: Optional[int] = None
+    supports_speaker: Optional[bool] = None
+    supports_hotwords: Optional[bool] = None
+    is_default: Optional[bool] = None
+    is_enabled: Optional[bool] = None
+    sort_order: Optional[int] = None
+    description: Optional[str] = None
+
+
+class AsrProviderOut(BaseModel):
+    model_config = ConfigDict(protected_namespaces=(), from_attributes=True)
+    id: int
+    name: str
+    base_url: str
+    auth_header: str = ""
+    auth_value: str = ""
+    timeout: int = 600
+    supports_speaker: bool = True
+    supports_hotwords: bool = True
+    is_default: bool = False
+    is_enabled: bool = True
+    sort_order: int = 0
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
 # ===== 搜索 =====
 class SearchHit(BaseModel):
     """统一搜索结果项（全文 + 语义）。"""

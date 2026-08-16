@@ -76,6 +76,8 @@ const srtUploading = ref(false)
 const transcribeLoading = ref(false)
 const transcribeEngineModal = ref(false)
 const transcribeEngineChoice = ref('qwen_asr')
+const transcribeAsrProvider = ref(null)
+const asrProviders = ref([])
 
 const statusMap = {
   pending: { type: 'info', label: '等待中' },
@@ -553,13 +555,24 @@ async function saveNotes() {
 async function addToTranscribeQueue() {
   transcribeEngineModal.value = true
   transcribeEngineChoice.value = 'qwen_asr'
+  transcribeAsrProvider.value = null
+  // 加载 ASR 提供商列表
+  if (!asrProviders.value.length) {
+    await loadAsrProviders()
+  }
+  // 设置默认提供商
+  if (asrProviders.value.length) {
+    const defaultProvider = asrProviders.value.find(p => p.is_default)
+    transcribeAsrProvider.value = defaultProvider ? defaultProvider.id : asrProviders.value[0].id
+  }
 }
 
 async function confirmTranscribe() {
   transcribeLoading.value = true
   try {
-    rec.value = await api.transcribe(route.params.id, transcribeEngineChoice.value)
-    ElMessage.success(`已开始转录（引擎: ${transcribeEngineChoice.value === 'zh_recogn' ? 'zh-recogn' : 'Qwen ASR'}）`)
+    rec.value = await api.transcribe(route.params.id, transcribeEngineChoice.value, transcribeAsrProvider.value)
+    const providerName = asrProviders.value.find(p => p.id === transcribeAsrProvider.value)?.name || 'Qwen ASR'
+    ElMessage.success(`已开始转录（引擎: ${providerName}）`)
     transcribeEngineModal.value = false
   } catch (e) {
     ElMessage.error('操作失败：' + (e.message || e._msg || '未知错误'))
@@ -700,6 +713,12 @@ async function loadEnabledModels() {
   } catch (e) {}
 }
 
+async function loadAsrProviders() {
+  try {
+    asrProviders.value = await api.enabledAsrProviders()
+  } catch (e) {}
+}
+
 async function load() {
   const id = route.params.id
   if (!id || id === 'undefined') {
@@ -768,6 +787,7 @@ onMounted(() => {
   load()
   loadMeetingTypes()
   loadEnabledModels()
+  loadAsrProviders()
 })
 
 onBeforeUnmount(() => {
@@ -1310,16 +1330,29 @@ onBeforeUnmount(() => {
     </el-dialog>
 
     <!-- 转录引擎选择弹窗（需求3） -->
-    <el-dialog v-model="transcribeEngineModal" title="选择转录引擎" width="480px">
+    <el-dialog v-model="transcribeEngineModal" title="选择转录引擎" width="560px">
       <el-alert type="info" :closable="false" style="margin-bottom: 16px">
         选择转录引擎后将立即开始转录，转录完成后自动生成摘要、关键词等。
       </el-alert>
       <el-form label-position="top">
         <el-form-item label="转录引擎">
           <el-radio-group v-model="transcribeEngineChoice">
-            <el-radio value="qwen_asr">Qwen3-ASR（支持说话人识别）</el-radio>
-            <el-radio value="zh_recogn">zh-recogn（纯中文识别，不支持说话人）</el-radio>
+            <el-radio value="qwen_asr">Qwen3-ASR 兼容</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item label="ASR 提供商">
+          <el-select
+            v-model="transcribeAsrProvider"
+            placeholder="自动选择默认提供商"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="p in asrProviders"
+              :key="p.id"
+              :label="p.name + (p.is_default ? '（默认）' : '')"
+              :value="p.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>

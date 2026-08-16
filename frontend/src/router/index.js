@@ -8,6 +8,7 @@ import VoiceprintManager from '../views/VoiceprintManager.vue'
 import HotwordManager from '../views/HotwordManager.vue'
 import MeetingTypeManager from '../views/MeetingTypeManager.vue'
 import ModelManager from '../views/ModelManager.vue'
+import AsrProviderManager from '../views/AsrProviderManager.vue'
 import ExportPage from '../views/ExportPage.vue'
 import TranscriptionQueue from '../views/TranscriptionQueue.vue'
 import Login from '../views/Login.vue'
@@ -23,6 +24,7 @@ const routes = [
   { path: '/hotwords', name: 'hotwords', component: HotwordManager },
   { path: '/meeting-types', name: 'meeting-types', component: MeetingTypeManager },
   { path: '/models', name: 'models', component: ModelManager },
+  { path: '/asr-providers', name: 'asr-providers', component: AsrProviderManager },
   { path: '/export', name: 'export', component: ExportPage },
   { path: '/transcription-queue', name: 'transcription-queue', component: TranscriptionQueue },
 ]

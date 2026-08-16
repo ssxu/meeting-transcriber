@@ -23,7 +23,6 @@ const statusMap = {
 }
 
 const engineLabel = (engine) => {
-  if (engine === 'zh_recogn') return 'zh-recogn'
   return 'Qwen ASR'
 }
 
@@ -115,30 +114,8 @@ async function cancelQueueItem(item) {
 
 // 切换转录引擎（仅排队中的任务可切换）
 async function switchEngine(item) {
-  const newEngine = item.engine === 'zh_recogn' ? 'qwen_asr' : 'zh_recogn'
-  try {
-    await ElMessageBox.confirm(
-      `确认将 "${item.recording_title}" 的转录引擎从 ${engineLabel(item.engine)} 切换为 ${engineLabel(newEngine)}？`,
-      '切换转录引擎',
-      { type: 'info' }
-    )
-    const token = localStorage.getItem('mt_token')
-    const resp = await fetch(`/api/transcription-queue/${item.id}/engine${token ? '?token=' + encodeURIComponent(token) : ''}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ engine: newEngine }),
-    })
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ detail: '操作失败' }))
-      throw new Error(err.detail || '操作失败')
-    }
-    ElMessage.success('转录引擎已切换')
-    await loadQueue()
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error('操作失败：' + (e.message || ''))
-    }
-  }
+  // 当前仅支持 qwen_asr 引擎，无需切换
+  ElMessage.info('当前仅支持 Qwen ASR 引擎')
 }
 
 function goToDetail(recordingId) {
@@ -204,7 +181,7 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="转录引擎" width="130">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.engine === 'zh_recogn' ? 'warning' : 'primary'">{{ engineLabel(row.engine) }}</el-tag>
+          <el-tag size="small" type="primary">{{ engineLabel(row.engine) }}</el-tag>
           <el-button
             v-if="row.status === 'queued'"
             size="small"

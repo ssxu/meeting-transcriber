@@ -26,6 +26,7 @@ const allTags = ref([])
 // 热词库和会议类型选项
 const hotwordLibs = ref([])
 const meetingTypes = ref([])
+const asrProviders = ref([])
 
 // 上传选项
 const uploadModal = ref(false)
@@ -34,6 +35,7 @@ const uploadSrtFile = ref(null)
 const uploadHotwordLib = ref(null)
 const uploadMeetingType = ref(null)
 const uploadEngine = ref('qwen_asr')
+const uploadAsrProvider = ref(null)
 
 // 批量选择
 const checkedIds = ref(new Set())
@@ -100,7 +102,7 @@ const tagOptions = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [listData, libs, types, tags] = await Promise.all([
+    const [listData, libs, types, tags, asrList] = await Promise.all([
       api.list({
         page: page.value,
         page_size: pageSize.value,
@@ -110,6 +112,7 @@ async function load() {
       api.hotwordLibraries(),
       api.meetingTypes(),
       api.tags(),
+      api.enabledAsrProviders(),
     ])
     recordings.value = listData.items || []
     total.value = listData.total || 0
@@ -117,6 +120,7 @@ async function load() {
     hotwordLibs.value = libs
     meetingTypes.value = types
     allTags.value = tags
+    asrProviders.value = asrList
 
     // 仅在首次加载时设置默认选项，避免轮询时覆盖用户手动选择
     if (!hotwordLibs.value.length || !uploadHotwordLib.value) {
@@ -126,6 +130,10 @@ async function load() {
     if (!meetingTypes.value.length || !uploadMeetingType.value) {
       const defaultType = types.find(t => t.is_default)
       if (defaultType) uploadMeetingType.value = defaultType.id
+    }
+    if (!asrProviders.value.length || !uploadAsrProvider.value) {
+      const defaultProvider = asrList.find(p => p.is_default)
+      if (defaultProvider) uploadAsrProvider.value = defaultProvider.id
     }
   } catch (e) {
     ElMessage.error(e._msg || '加载列表失败')
@@ -172,11 +180,14 @@ function openUploadModal() {
   uploadFile.value = null
   uploadSrtFile.value = null
   uploadEngine.value = 'qwen_asr'
+  uploadAsrProvider.value = null
   // 重置为默认值
   const defaultLib = hotwordLibs.value.find(l => l.is_default)
   uploadHotwordLib.value = defaultLib ? defaultLib.id : null
   const defaultType = meetingTypes.value.find(t => t.is_default)
   uploadMeetingType.value = defaultType ? defaultType.id : null
+  const defaultProvider = asrProviders.value.find(p => p.is_default)
+  uploadAsrProvider.value = defaultProvider ? defaultProvider.id : null
   uploadModal.value = true
 }
 
@@ -194,12 +205,13 @@ async function confirmUpload() {
     return
   }
   try {
-    await api.upload(uploadFile.value, uploadHotwordLib.value, uploadMeetingType.value, uploadSrtFile.value, uploadEngine.value)
+    await api.upload(uploadFile.value, uploadHotwordLib.value, uploadMeetingType.value, uploadSrtFile.value, uploadEngine.value, uploadAsrProvider.value)
     let msg = '上传成功'
     if (uploadSrtFile.value) {
       msg = '上传成功，已使用字幕/转录文件跳过转录'
     } else {
-      msg = `上传成功，已使用 ${uploadEngine.value === 'zh_recogn' ? 'zh-recogn' : 'Qwen3-ASR'} 引擎加入转录队列`
+      const providerName = asrProviders.value.find(p => p.id === uploadAsrProvider.value)?.name || 'Qwen3-ASR'
+      msg = `上传成功，已使用 ${providerName} 引擎加入转录队列`
     }
     ElMessage.success(msg)
     uploadModal.value = false
@@ -613,9 +625,22 @@ onUnmounted(() => {
         </el-form-item>
         <el-form-item v-if="!uploadSrtFile" label="转录引擎">
           <el-radio-group v-model="uploadEngine">
-            <el-radio value="qwen_asr">Qwen3-ASR（支持说话人识别）</el-radio>
-            <el-radio value="zh_recogn">zh-recogn（纯中文识别，不支持说话人）</el-radio>
+            <el-radio value="qwen_asr">Qwen3-ASR 兼容</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="!uploadSrtFile" label="ASR 提供商">
+          <el-select
+            v-model="uploadAsrProvider"
+            placeholder="自动选择默认提供商"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="p in asrProviders"
+              :key="p.id"
+              :label="p.name + (p.is_default ? '（默认）' : '')"
+              :value="p.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="热词库">
           <el-select

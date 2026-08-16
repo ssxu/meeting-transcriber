@@ -57,13 +57,14 @@ export default {
   },
   tags: () => api.get('/recordings/tags/list').then((r) => r.data),
   detail: (id) => api.get(`/recordings/${id}`).then((r) => r.data),
-  upload: (file, hotwordLibraryId = null, meetingTypeId = null, srtFile = null, engine = 'qwen_asr') => {
+  upload: (file, hotwordLibraryId = null, meetingTypeId = null, srtFile = null, engine = 'qwen_asr', asrProviderId = null) => {
     const fd = new FormData()
     fd.append('file', file)
     if (srtFile) fd.append('srt_file', srtFile)
     fd.append('engine', engine)
     if (hotwordLibraryId) fd.append('hotword_library_id', hotwordLibraryId)
     if (meetingTypeId) fd.append('meeting_type_id', meetingTypeId)
+    if (asrProviderId) fd.append('asr_provider_id', asrProviderId)
     return api.post('/recordings/upload', fd).then((r) => r.data)
   },
   audioUrl: (id) => {
@@ -108,10 +109,11 @@ export default {
     return `/api/recordings/${id}/download${token ? '?token=' + encodeURIComponent(token) : ''}`
   },
 
-  // 直接发起转录（选择引擎）
-  transcribe: (id, engine = 'qwen_asr') => {
-    const token = localStorage.getItem('mt_token')
-    return api.post(`/recordings/${id}/transcribe`, null, { params: { engine } }).then((r) => r.data)
+  // 直接发起转录（选择引擎和 ASR 提供商）
+  transcribe: (id, engine = 'qwen_asr', asrProviderId = null) => {
+    const params = { engine }
+    if (asrProviderId !== null) params.asr_provider_id = asrProviderId
+    return api.post(`/recordings/${id}/transcribe`, null, { params }).then((r) => r.data)
   },
 
   // 加入转录队列（选择引擎）
@@ -252,5 +254,12 @@ export default {
   health: () => api.get('/health').then((r) => r.data),
 
   // ===== 系统配置 =====
-  config: () => api.get('/config').then((r) => r.data)
+  config: () => api.get('/config').then((r) => r.data),
+
+  // ===== ASR 提供商管理 =====
+  asrProviders: () => api.get('/asr-providers').then((r) => r.data),
+  enabledAsrProviders: () => api.get('/asr-providers/enabled').then((r) => r.data),
+  createAsrProvider: (data) => api.post('/asr-providers', data).then((r) => r.data),
+  updateAsrProvider: (id, data) => api.patch(`/asr-providers/${id}`, data).then((r) => r.data),
+  deleteAsrProvider: (id) => api.delete(`/asr-providers/${id}`).then((r) => r.data),
 }

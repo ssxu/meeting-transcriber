@@ -51,19 +51,21 @@ async def upload_recording(
     engine: str = Form("qwen_asr"),
     hotword_library_id: int | None = Form(None),
     meeting_type_id: int | None = Form(None),
+    asr_provider_id: int | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
     """上传录音文件，自动触发转录和摘要。
-    
+
     可选参数:
       - srt_file: 字幕/转录文件（选传，支持 SRT 和 TXT 格式）。如果上传了此文件，
         则跳过 ASR 转录，直接使用文件内容作为逐字稿，并自动触发后续的摘要生成等流程。
-      - engine: 转录引擎，qwen_asr（默认，支持说话人识别）或 zh_recogn（纯中文识别）
+      - engine: 转录引擎，qwen_asr（默认，支持说话人识别）
       - hotword_library_id: 热词库ID，传递给ASR转录接口的vocabulary_id
       - meeting_type_id: 会议类型ID，对应的summary_prompt传递给LLM总结接口
+      - asr_provider_id: ASR 提供商 ID（选传，指定后固定使用该提供商）
     """
     # 验证 engine 参数
-    if engine not in ("qwen_asr", "zh_recogn"):
+    if engine not in ("qwen_asr",):
         raise HTTPException(status_code=400, detail=f"不支持的转录引擎: {engine}")
 
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -84,6 +86,7 @@ async def upload_recording(
         status="pending",
         hotword_library_id=hotword_library_id,
         meeting_type_id=meeting_type_id,
+        asr_provider_id=asr_provider_id,
     )
     db.add(rec)
     await db.commit()
@@ -91,7 +94,7 @@ async def upload_recording(
     logger.info(
         f"录音已上传: id={rec.id}, filename={rec.original_filename}, size={size}, "
         f"hotword_lib={hotword_library_id}, meeting_type={meeting_type_id}, "
-        f"engine={engine}, srt_file={'yes' if srt_file else 'no'}"
+        f"engine={engine}, asr_provider_id={asr_provider_id}, srt_file={'yes' if srt_file else 'no'}"
     )
 
     # 如果上传了 SRT 文件，跳过 ASR 转录，直接解析 SRT 并触发生成摘要
@@ -1664,30 +1667,35 @@ async def transcribe_recording(
     rec_id: int,
     background_tasks: BackgroundTasks,
     engine: str = "qwen_asr",
+    asr_provider_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """直接发起转录（不通过队列），支持选择转录引擎。
-    
+    """直接发起转录（不通过队列），支持选择转录引擎和 ASR 提供商。
+
     Args:
-        engine: 转录引擎，qwen_asr (默认) 或 zh_recogn
+        engine: 转录引擎，qwen_asr (默认)
+        asr_provider_id: ASR 提供商 ID（选传，指定后更新录音的 asr_provider_id）
     """
     rec = await db.get(Recording, rec_id)
     if not rec:
         raise HTTPException(status_code=404, detail="录音不存在")
-    
-    if engine not in ("qwen_asr", "zh_recogn"):
+
+    if engine not in ("qwen_asr",):
         raise HTTPException(status_code=400, detail=f"不支持的转录引擎: {engine}")
-    
+
     if rec.status in ("transcribing", "summarizing"):
         raise HTTPException(status_code=400, detail="当前正在处理中，请等待完成")
-    
+
     rec.status = "pending"
     rec.error_message = None
     rec.engine = engine
+    # 如果前端指定了 ASR 提供商，更新录音的 provider 绑定
+    if asr_provider_id is not None:
+        rec.asr_provider_id = asr_provider_id
     await db.commit()
     await db.refresh(rec)
-    
-    logger.info(f"直接转录, rec_id={rec_id}, engine={engine}")
+
+    logger.info(f"直接转录, rec_id={rec_id}, engine={engine}, asr_provider_id={asr_provider_id}")
     background_tasks.add_task(process_transcription, rec_id, engine)
     return RecordingDetail.model_validate(rec)
 
@@ -1855,9 +1863,9 @@ async def _ensure_segment_embeddings(rec_id: int):
 
 async def process_transcription(rec_id: int, engine: str = "qwen_asr"):
     """后台任务：调用 ASR 转录音频。
-    
+
     Args:
-        engine: 转录引擎，qwen_asr (默认) 或 zh_recogn
+        engine: 转录引擎，qwen_asr (默认)
     """
     logger.info(f"process_transcription 开始, rec_id={rec_id}, engine={engine}")
     async with async_session() as db:
@@ -1868,33 +1876,26 @@ async def process_transcription(rec_id: int, engine: str = "qwen_asr"):
         rec.engine = engine
         await db.commit()
         try:
-            if engine == "zh_recogn":
-                # 使用 zh-recogn 接口
-                result = await asr.transcribe_audio_zh_recogn(
-                    file_path=rec.audio_path,
-                    filename=rec.original_filename,
-                    content_type=rec.content_type,
+            # 构建热词库参数
+            vocabulary_id = None
+            if rec.hotword_library_id:
+                result_hotwords = await db.execute(
+                    select(Hotword).where(Hotword.library_id == rec.hotword_library_id)
                 )
-            else:
-                # 默认使用 Qwen ASR
-                # 构建热词库参数
-                vocabulary_id = None
-                if rec.hotword_library_id:
-                    result_hotwords = await db.execute(
-                        select(Hotword).where(Hotword.library_id == rec.hotword_library_id)
-                    )
-                    hotwords = result_hotwords.scalars().all()
-                    if hotwords:
-                        parts = [f"{hw.word} {hw.weight}" for hw in hotwords]
-                        vocabulary_id = " ".join(parts)
-                        logger.info(f"录音{rec_id}使用热词库{rec.hotword_library_id}: {len(hotwords)}个热词")
+                hotwords = result_hotwords.scalars().all()
+                if hotwords:
+                    parts = [f"{hw.word} {hw.weight}" for hw in hotwords]
+                    vocabulary_id = " ".join(parts)
+                    logger.info(f"录音{rec_id}使用热词库{rec.hotword_library_id}: {len(hotwords)}个热词")
 
-                result = await asr.transcribe_audio(
-                    file_path=rec.audio_path,
-                    filename=rec.original_filename,
-                    content_type=rec.content_type,
-                    vocabulary_id=vocabulary_id,
-                )
+            result = await asr.transcribe_audio(
+                file_path=rec.audio_path,
+                filename=rec.original_filename,
+                content_type=rec.content_type,
+                provider_id=rec.asr_provider_id,
+                vocabulary_id=vocabulary_id,
+                db=db,
+            )
             rec.transcript_text = result.get("text")
             rec.transcript_segments = result.get("segments")
             rec.language = result.get("language")

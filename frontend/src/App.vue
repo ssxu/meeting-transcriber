@@ -28,6 +28,7 @@ const manageItems = [
   { key: 'hotwords', label: '📝 热词库' },
   { key: 'meeting-types', label: '🏷 内容类型配置' },
   { key: 'models', label: '🤖 模型管理' },
+  { key: 'asr-providers', label: '🎙️ ASR 提供商' },
   { key: 'export', label: '📦 导出' },
 ]
 

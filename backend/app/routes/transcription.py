@@ -153,9 +153,9 @@ async def add_to_queue(
     """将录音添加到待转录队列。
     
     Args:
-        engine: 转录引擎，qwen_asr (默认) 或 zh_recogn
+        engine: 转录引擎，qwen_asr (默认)
     """
-    if engine not in ("qwen_asr", "zh_recogn"):
+    if engine not in ("qwen_asr",):
         raise HTTPException(status_code=400, detail=f"不支持的转录引擎: {engine}")
     tq = await add_recording_to_queue(recording_id, engine, background_tasks, db)
     return {"detail": "已加入转录队列", "queue_id": tq.id}
@@ -210,7 +210,7 @@ async def switch_queue_engine(
         raise HTTPException(status_code=400, detail="只有排队中的任务可以切换引擎")
     
     new_engine = body.get("engine")
-    if new_engine not in ("qwen_asr", "zh_recogn"):
+    if new_engine not in ("qwen_asr",):
         raise HTTPException(status_code=400, detail=f"不支持的转录引擎: {new_engine}")
     
     old_engine = tq.engine or "qwen_asr"

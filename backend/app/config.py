@@ -29,11 +29,6 @@ class Settings(BaseSettings):
     # 全局默认最大上下文长度（当数据库无默认模型时使用）
     llm_max_context_length: int = 32000
 
-    # ===== zh-recogn 转录接口 =====
-    # 本地部署的中文识别接口，不支持说话人识别
-    zh_recogn_url: str = "http://192.168.100.56:7005/api"
-    zh_recogn_timeout: int = 1800
-
     # 向量数据库（Zvec）数据存储路径
     zvec_data_path: str = "./data/zvec"
 
