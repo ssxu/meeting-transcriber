@@ -14,6 +14,7 @@ from app.routes.asr_providers import router as asr_providers_router
 from app.auth import auth_middleware, router as auth_router
 from app.config import settings
 from app.services.vector_store import vector_store
+from app.services.watcher import start_watcher, stop_watcher
 
 # ===== 日志系统配置 =====
 logging.basicConfig(
@@ -41,7 +42,15 @@ async def lifespan(app: FastAPI):
     # 启动转录队列定时轮询
     start_queue_poller()
 
+    # 启动目录监听服务
+    if settings.watch_enabled:
+        await start_watcher()
+
     yield
+
+    # 停止目录监听服务
+    stop_watcher()
+
     # 关闭时 flush 向量数据库
     try:
         vector_store.flush()

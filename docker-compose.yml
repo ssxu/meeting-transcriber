@@ -40,10 +40,20 @@ services:
       # ===== MCP Server =====
       - MCP_TOKEN=
       - MCP_MAX_RESULTS=20
+      # ===== 目录监听配置 =====
+      - WATCH_ENABLED=true
+      - WATCH_DIRECTORY=/watch/recordings
+      - WATCH_RECURSIVE=false
+      - WATCH_FILE_READY_DELAY=2.0
+      - WATCH_DELETE_ON_SUCCESS=true
+      - WATCH_ALLOWED_EXTENSIONS=.wav,.mp3,.m4a,.flac,.ogg,.aac,.opus,.webm,.mp4,.mkv,.avi,.mov,.wmv
+      - WATCH_DEDUP_INTERVAL=300
     # 使用 bind mount 映射到 NAS 的 data 文件夹
     # 将 ./data 替换为你的 NAS 挂载路径，如 /mnt/nas/meeting-transcriber/data
     volumes:
       - ./data:/data
+      # 挂载录音来源目录到监听目录（本地开发时取消注释并修改为实际路径）
+      # - /path/to/your/recordings:/watch/recordings:ro
     restart: unless-stopped
 
   frontend:

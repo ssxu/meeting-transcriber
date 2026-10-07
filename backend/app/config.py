@@ -64,6 +64,22 @@ class Settings(BaseSettings):
     # MCP 搜索结果最大返回数
     mcp_max_results: int = 20
 
+    # ===== 目录监听配置 =====
+    # 是否启用目录监听功能（监听新录音文件自动处理）
+    watch_enabled: bool = False
+    # 监听目录路径
+    watch_directory: str = "/watch/recordings"
+    # 是否递归监听子目录
+    watch_recursive: bool = False
+    # 文件就绪等待时间（秒），避免文件写入不完整
+    watch_file_ready_delay: float = 2.0
+    # 处理完成后是否删除源文件
+    watch_delete_on_success: bool = True
+    # 允许的文件扩展名（逗号分隔）
+    watch_allowed_extensions: str = ".wav,.mp3,.m4a,.flac,.ogg,.aac,.opus,.webm,.mp4,.mkv,.avi,.mov,.wmv"
+    # 防重复处理间隔（秒），相同指纹的文件在此间隔内不重复处理
+    watch_dedup_interval: int = 300
+
 
 # ===== 会议纪要默认提示词 =====
 # Map 阶段：单个文本块的结构化提取
