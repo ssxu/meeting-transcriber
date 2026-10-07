@@ -72,6 +72,9 @@ const srtUploadModal = ref(false)
 const srtFile = ref(null)
 const srtUploading = ref(false)
 
+// ===== 重命名状态 =====
+const renaming = ref(false)
+
 // ===== 转录按钮（需求9 + 需求3：选择引擎） =====
 const transcribeLoading = ref(false)
 const transcribeEngineModal = ref(false)
@@ -586,6 +589,29 @@ function downloadAudio() {
   window.open(api.downloadUrl(route.params.id), '_blank')
 }
 
+// ===== 重命名录音 =====
+async function renameRecording() {
+  const currentTitle = rec.value?.title || rec.value?.original_filename || ''
+  try {
+    const { value } = await ElMessageBox.prompt('修改录音名称', '重命名', {
+      inputValue: currentTitle,
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValidator: (v) => v && v.trim() ? true : '标题不能为空',
+    })
+    if (value && value.trim() !== currentTitle) {
+      renaming.value = true
+      const updated = await api.rename(route.params.id, value.trim())
+      rec.value = { ...rec.value, ...updated }
+      ElMessage.success('已重命名')
+    }
+  } catch (e) {
+    // cancelled or empty
+  } finally {
+    renaming.value = false
+  }
+}
+
 // ===== 通用功能 =====
 async function copyText(text, label) {
   if (!text) {
@@ -880,7 +906,10 @@ onBeforeUnmount(() => {
     <!-- 音频播放器 -->
     <el-card shadow="never">
       <template #header>
-        <span>{{ rec.title || rec.original_filename }}</span>
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span>{{ rec.title || rec.original_filename }}</span>
+          <el-button text size="small" @click="renameRecording" title="重命名">✏️</el-button>
+        </div>
       </template>
       <div style="display: flex; flex-direction: column; gap: 12px">
         <audio-player

@@ -18,7 +18,7 @@ async def list_asr_providers(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(AsrProvider).order_by(AsrProvider.sort_order.asc(), AsrProvider.id.asc())
     )
-    return [AsrProviderOut.model_validate(r) for r in result.scalars().all()]
+    return [AsrProviderOut.from_model(r) for r in result.scalars().all()]
 
 
 @router.get("/enabled", response_model=list[AsrProviderOut])
@@ -29,7 +29,7 @@ async def list_enabled_asr_providers(db: AsyncSession = Depends(get_db)):
         .where(AsrProvider.is_enabled == True)
         .order_by(AsrProvider.sort_order.asc(), AsrProvider.id.asc())
     )
-    return [AsrProviderOut.model_validate(r) for r in result.scalars().all()]
+    return [AsrProviderOut.from_model(r) for r in result.scalars().all()]
 
 
 @router.post("", response_model=AsrProviderOut)
@@ -58,7 +58,7 @@ async def create_asr_provider(req: AsrProviderCreate, db: AsyncSession = Depends
     await db.commit()
     await db.refresh(provider)
     logger.info(f"ASR 提供商已创建: id={provider.id}, name={provider.name}")
-    return AsrProviderOut.model_validate(provider)
+    return AsrProviderOut.from_model(provider)
 
 
 @router.get("/{provider_id}", response_model=AsrProviderOut)
@@ -67,7 +67,7 @@ async def get_asr_provider(provider_id: int, db: AsyncSession = Depends(get_db))
     provider = await db.get(AsrProvider, provider_id)
     if not provider:
         raise HTTPException(status_code=404, detail="ASR 提供商不存在")
-    return AsrProviderOut.model_validate(provider)
+    return AsrProviderOut.from_model(provider)
 
 
 @router.patch("/{provider_id}", response_model=AsrProviderOut)
@@ -83,7 +83,8 @@ async def update_asr_provider(provider_id: int, req: AsrProviderUpdate, db: Asyn
     if req.auth_header is not None:
         provider.auth_header = req.auth_header
     if req.auth_value is not None:
-        provider.auth_value = req.auth_value
+        if "****" not in req.auth_value:
+            provider.auth_value = req.auth_value
     if req.timeout is not None:
         provider.timeout = req.timeout
     if req.supports_speaker is not None:
@@ -108,7 +109,7 @@ async def update_asr_provider(provider_id: int, req: AsrProviderUpdate, db: Asyn
     await db.commit()
     await db.refresh(provider)
     logger.info(f"ASR 提供商已更新: id={provider_id}")
-    return AsrProviderOut.model_validate(provider)
+    return AsrProviderOut.from_model(provider)
 
 
 @router.delete("/{provider_id}")

@@ -6,7 +6,9 @@ ASR 服务接口规范（OpenAI 兼容 /v1/audio/transcriptions）:
 - verbose_json 响应字段: result(text)、segments、duration、task_id、status、message
 - segments 字段: text、start、end、speaker
 """
+import asyncio
 import logging
+import os
 import aiofiles
 import httpx
 from app.config import settings
@@ -62,22 +64,28 @@ async def transcribe_audio(
     if provider:
         base_url = provider.base_url.rstrip("/")
         headers = _build_provider_headers(provider)
-        timeout = httpx.Timeout(
-            connect=30.0,
-            read=float(provider.timeout),
-            write=300.0,
-            pool=10.0,
-        )
+        base_timeout = float(provider.timeout)
     else:
         # 回退到全局环境变量配置
         base_url = settings.asr_base_url.rstrip("/")
         headers = _build_legacy_headers()
-        timeout = httpx.Timeout(
-            connect=30.0,
-            read=float(settings.asr_timeout),
-            write=300.0,
-            pool=10.0,
-        )
+        base_timeout = float(settings.asr_timeout)
+
+    # 根据文件大小动态调整超时：大文件需要更长处理时间
+    try:
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    except OSError:
+        file_size_mb = 0
+    # 每 50MB 额外增加 10 分钟，上限 2 小时
+    dynamic_timeout = max(base_timeout, min(file_size_mb / 50 * 600, 7200))
+    timeout = httpx.Timeout(
+        connect=30.0,
+        read=dynamic_timeout,
+        write=300.0,
+        pool=10.0,
+    )
+    if dynamic_timeout > base_timeout:
+        logger.info(f"大文件动态超时: {file_size_mb:.1f}MB -> {dynamic_timeout:.0f}s (基础: {base_timeout:.0f}s)")
 
     url = f"{base_url}/v1/audio/transcriptions"
 
@@ -103,11 +111,10 @@ async def transcribe_audio(
                 resp.raise_for_status()
                 raw = resp.json()
             break
-        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError) as e:
+        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
             last_error = e
             logger.warning(f"转录连接异常(attempt {attempt}): {e}")
             if attempt <= MAX_RETRIES:
-                import asyncio
                 await asyncio.sleep(3 * attempt)
             else:
                 raise

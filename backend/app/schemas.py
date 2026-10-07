@@ -21,6 +21,7 @@ class RecordingOut(BaseModel):
     meeting_type_id: Optional[int] = None
     content_category: Optional[str] = None
     content_sub_type: Optional[str] = None
+    asr_provider_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -342,6 +343,34 @@ class AsrProviderOut(BaseModel):
     sort_order: int = 0
     description: Optional[str] = None
     created_at: Optional[datetime] = None
+
+    @classmethod
+    def from_model(cls, model):
+        """从 AsrProvider ORM 对象创建响应模型，对 auth_value 脱敏。"""
+        data = {}
+        for field in cls.model_fields:
+            if hasattr(model, field):
+                val = getattr(model, field, None)
+                if field == "created_at" and val is None:
+                    from datetime import datetime, timezone
+                    val = datetime.now(timezone.utc)
+                data[field] = val
+        key = data.get("auth_value", "")
+        if key and len(key) > 8:
+            data["auth_value"] = key[:4] + "****" + key[-4:]
+        elif key:
+            data["auth_value"] = "****"
+        return cls(**data)
+
+    @model_validator(mode="after")
+    def _mask_auth_value(self):
+        """防御性脱敏：如果 auth_value 看起来像真实密钥（非掩码格式），自动掩码。"""
+        key = self.auth_value
+        if key and "****" not in key and len(key) > 8:
+            object.__setattr__(self, "auth_value", key[:4] + "****" + key[-4:])
+        elif key and "****" not in key and key != "":
+            object.__setattr__(self, "auth_value", "****")
+        return self
 
 
 # ===== 搜索 =====

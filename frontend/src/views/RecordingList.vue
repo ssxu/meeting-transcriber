@@ -7,6 +7,16 @@ import { formatDateTime } from '../utils/format'
 
 const router = useRouter()
 
+// 视图切换
+const viewMode = ref(localStorage.getItem('mt_list_view') || 'table')
+const isWideScreen = ref(window.matchMedia('(min-width: 1200px)').matches)
+let mqHandler = null
+
+function switchView(mode) {
+  viewMode.value = mode
+  localStorage.setItem('mt_list_view', mode)
+}
+
 // 列表数据
 const recordings = ref([])
 const loading = ref(false)
@@ -411,10 +421,15 @@ async function confirmDeleteRecording(id) {
 }
 
 onMounted(() => {
+  const mq = window.matchMedia('(min-width: 1200px)')
+  mqHandler = (e) => { isWideScreen.value = e.matches }
+  mq.addEventListener('change', mqHandler)
   load()
 })
 
 onUnmounted(() => {
+  const mq = window.matchMedia('(min-width: 1200px)')
+  if (mqHandler) mq.removeEventListener('change', mqHandler)
   if (recordingTimer) clearInterval(recordingTimer)
   if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
     mediaRecorder.value.stop()
@@ -428,6 +443,10 @@ onUnmounted(() => {
     <div class="toolbar">
       <div class="toolbar-left">
         <el-button @click="load" :loading="loading">刷新</el-button>
+        <el-button-group>
+          <el-button :type="viewMode === 'table' ? 'primary' : 'default'" @click="switchView('table')">📊 表格</el-button>
+          <el-button :type="viewMode === 'card' ? 'primary' : 'default'" @click="switchView('card')">📦 卡片</el-button>
+        </el-button-group>
         <el-button :type="batchMode ? 'primary' : 'default'" @click="toggleBatchMode">
           {{ batchMode ? '退出批量' : '批量操作' }}
         </el-button>
@@ -508,7 +527,83 @@ onUnmounted(() => {
     <el-skeleton :loading="loading" animated>
       <template #default>
         <el-empty v-if="!recordings.length" description="暂无录音，点击右上角上传或开始录音" />
-        <div v-if="recordings.length" class="card-grid">
+
+        <!-- 表格视图 -->
+        <el-table
+          v-if="recordings.length && viewMode === 'table'"
+          :data="recordings"
+          @row-click="(row) => goToDetail(row)"
+          row-class-name="rec-table-row"
+          style="width: 100%"
+          :header-cell-style="{ padding: '8px 0' }"
+          :cell-style="{ padding: '6px 0' }"
+        >
+          <el-table-column type="selection" v-if="batchMode" width="40" />
+          <el-table-column label="标题" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="table-title">{{ row.title || row.original_filename }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="tagOf(row.status).type" size="small">{{ tagOf(row.status).label }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="时长" width="70" align="center">
+            <template #default="{ row }">{{ formatDuration(row.duration) }}</template>
+          </el-table-column>
+          <el-table-column label="语言" width="60" align="center">
+            <template #default="{ row }">{{ row.language || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="140">
+            <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column v-if="isWideScreen" label="标签" min-width="120">
+            <template #default="{ row }">
+              <template v-if="row.tags && row.tags.length">
+                <el-tag
+                  v-for="t in row.tags.slice(0, 3)"
+                  :key="t"
+                  size="small"
+                  type="warning"
+                  effect="plain"
+                  round
+                  style="margin-right: 4px; margin-bottom: 2px"
+                >{{ t }}</el-tag>
+                <el-tag v-if="row.tags.length > 3" size="small" type="info" round>+{{ row.tags.length - 3 }}</el-tag>
+              </template>
+              <span v-else style="color: var(--el-text-color-placeholder)">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isWideScreen" label="关键词" min-width="120">
+            <template #default="{ row }">
+              <template v-if="row.keywords && row.keywords.length">
+                <el-tag
+                  v-for="kw in row.keywords.slice(0, 3)"
+                  :key="kw"
+                  size="small"
+                  type="primary"
+                  round
+                  style="margin-right: 4px; margin-bottom: 2px"
+                >{{ kw }}</el-tag>
+                <el-tag v-if="row.keywords.length > 3" size="small" type="info" round>+{{ row.keywords.length - 3 }}</el-tag>
+              </template>
+              <span v-else style="color: var(--el-text-color-placeholder)">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" v-if="!batchMode">
+            <template #default="{ row }">
+              <div class="table-actions">
+                <el-button size="small" text @click.stop="openRename(row)">✏️</el-button>
+                <el-button size="small" text @click.stop="copyShareLink(row.id)">🔗</el-button>
+                <el-button size="small" text type="danger" @click.stop="confirmDeleteRecording(row.id)">🗑</el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 卡片视图 -->
+        <div v-if="recordings.length && viewMode === 'card'" class="card-grid">
           <el-card
             v-for="r in recordings"
             :key="r.id"
@@ -525,7 +620,7 @@ onUnmounted(() => {
                     @change="(v) => toggleCheck(r.id, v)"
                     @click.stop
                   />
-                  <span>{{ r.title || r.original_filename }}</span>
+                  <span :title="r.title || r.original_filename">{{ r.title || r.original_filename }}</span>
                 </div>
                 <div class="card-header-right">
                   <el-tag :type="tagOf(r.status).type" size="small">{{ tagOf(r.status).label }}</el-tag>
@@ -552,6 +647,7 @@ onUnmounted(() => {
               </div>
             </template>
             <div class="card-body">
+              <div class="card-title-preview">{{ r.title || r.original_filename }}</div>
               <div style="color: #888; font-size: 13px">
                 时长：{{ formatDuration(r.duration) }} | 大小：{{ formatSize(r.file_size) }}
               </div>
@@ -727,6 +823,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.card-header-left > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .card-header-right {
@@ -752,5 +860,37 @@ onUnmounted(() => {
   margin-top: 24px;
   display: flex;
   justify-content: center;
+}
+
+/* 表格视图 */
+.table-title {
+  font-weight: 500;
+}
+
+.table-actions {
+  display: flex;
+  gap: 2px;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+:deep(.rec-table-row) {
+  cursor: pointer;
+}
+
+:deep(.rec-table-row:hover) {
+  background-color: var(--el-fill-color-light) !important;
+}
+
+/* 卡片视图标题预览 */
+.card-title-preview {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 4px;
 }
 </style>
